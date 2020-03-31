@@ -1,4 +1,4 @@
-.eqv BMP_FILE_SIZE 250000
+.eqv BMP_FILE_SIZE 2500000
 	.data
 fname:	.asciiz "source.bmp"
 bitmaparea: .space BMP_FILE_SIZE # Reserve the data section being used by the bitmap display (512 x 256 bytes)	
@@ -12,94 +12,212 @@ display7: .asciiz "\nEnter 7 to run the fillcircle subroutine"
 display8: .asciiz "\nEnter 8 to run the dashedline subroutine\n"
 runagain: .asciiz "\nTo run another drawing primative enter 1, to exit enter 2"
 bitmapreset: .asciiz "\nRemember to reset the bitmap display if running again\n"
-const:  .float  121.28    
-input: .asciiz "F--F++"
+cos:  .float  0.5  
+sin:  .float  0.865
+distance: .float 200.0
+input: .asciiz "F+F-F"
 	.text
 
-main:			
-    	li $a0, 0			# Load the x co-ordinate (49) of point 1 into the register $a0 ready to 
-						# be passed into the subroutine
-   	li $a1, 0			# Load the y co-ordinate (49) of point 1 into the register $a1 ready to 
-						# be passed into the subroutine
-    	li $a2, 100			# Load the x co-ordinate (99) of point 2 into the register $a2 ready to 
-						# be passed into the subroutine
-   	li $a3, 100			# Load the y co-ordinate (99) of point 2 into the register $a3 ready to 
-						# be passed into the subroutine
-    	li $t9, 0x00FF0000	# Load the colour of the line (red) into $t9 so it can be added to the stack
-	addiu $sp, $sp, -4	# Decrement the stack pointer	
-	sw $t9, ($sp)		# Save the value of $t9 (which is now the value of the colour paramter) to the stack
-	
-	jal drawline		# Enter the subroutine "drawline"
-	nop
-	
-	li $a0, 100							
-   	li $a1, 100
-   	
-   	jal rotate
-   	
-   	li $a0, 100							
-   	li $a1, 100
-   	
-   	move $a2, $v0							
-   	move $a3, $v1
-   	
-   	jal forward			
-	
-	
-	li $a0, 100
-				
-   	li $a1, 100
-   				
-    	move $a2, $v0
-    								
-   	move $a3, $v1
-   				
-    	li $t9, 0x00FF0000	
-    	
-	addiu $sp, $sp, -4		
-	sw $t9, ($sp)		
-	
-	jal drawline	
-	
+main:		
 	li $t0, 0
+	li $a0, 0			
+   	li $a1,	0
+	li $a2, 50		
+   	li $a3, 1
+   	li $k0, 0
+   	li $k1, 0
 	
-	jal save_bmp
+	jal inst_loop
 
 inst_loop:
 	# iterate through series
     	lb $t1, input($t0)
    	beq $t1, 0, primitiveran
 	# change lower case character to '*'
+	
 	beq $t1,'+',rotate_right
-	beq $t1,'-',rotate_right
-	beq $t1,'F',forward
-   	move $t1, $t2
+	beq $t1,'-',rotate_left
+
+   	beq $t1,'F',forward
+	
    	j case 
     	sb $t1, input($t0)
 		
 rotate_right:
-	j rotate
+
+	
+	mtc1 $a2,$f0 # konwersja z int na float
+	move $s0,$a2 # move x2 to stack
+	sub $s0,$s0,$a0 # x2 - x1
+	l.s $f2 cos # save cos
+	l.s $f3 sin # save sin
+	
+	div $s0,$s0,2  # x*cos
+	
+	mul.s $f0,$f0,$f2 # x*cos
+	mtc1 $a3,$f1
+	
+	move $s1,$a3 # move y2 to stack
+	sub $s1,$s1,$a1 # y2 - y1
+	
+	mul $s1,$s1,7 # y*7
+	div $s1,$s1,8 # y/8
+	
+	mul.s $f1,$f1,$f3 # y*sin
+	
+	sub.s $f0,$f0,$f1 
+	
+	sub $s0,$s0,$s1 # x*cos - y*sin
+
+	mfc1 $v0,$f0 # konwersja z float na int
+	add $s0, $s0,$a0 # y2 + y1
+	move $v0,$s0 # resutl x2
+	
+	mtc1 $a2,$f0 # konwersja z int na float
+	move $s0,$a2  # move x2 to stack
+	sub $s0,$s0,$a0 # x2 - x1
+	
+	mul.s $f0,$f0,$f3 # x*sin
+	
+	mul $s0,$s0,7	#x*7	
+	div $s0,$s0,8 # x/8
+	
+	mtc1 $a3,$f1
+	move $s1,$a3  # move y2 to stack
+	sub $s1,$s1,$a1 # y2 - y1
+
+	mul.s $f1,$f1,$f2 # y*cos
+	div $s1,$s1,2 #y*cos
+	
+	add.s $f0,$f0,$f1
+	add $s0,$s0,$s1
+
+	mfc1 $v1,$f0 # konwersja z float na int
+	add $s0, $s0,$a1 # y2 + y1
+	move $v1,$s0 # result y2
+		 	 
+	move $a3,$v1
+	move $a2,$v0
+	
+	jal case
 rotate_left:
-	j rotate
+
+	
+	mtc1 $a2,$f0 # konwersja z int na float
+	move $s0,$a2 # move x2 to stack
+	sub $s0,$s0,$a0 # x2 - x1
+	l.s $f2 cos # save cos
+	l.s $f3 sin # save sin
+	
+	div $s0,$s0,2  # x*cos
+	
+	mul.s $f0,$f0,$f2 # x*cos
+	mtc1 $a3,$f1
+	
+	move $s1,$a3 # move y2 to stack
+	sub $s1,$s1,$a1 # y2 - y1
+	
+	mul $s1,$s1,7 # y*7
+	div $s1,$s1,8 # y/8
+	
+	mul.s $f1,$f1,$f3 # y*sin
+	
+	add.s $f0,$f0,$f1 
+	
+	add $s0,$s0,$s1 # x*cos + y*sin
+
+	mfc1 $v0,$f0 # konwersja z float na int
+	add $s0, $s0,$a0 # x2 + x1
+
+	move $v0,$s0 # resutl x2
+	
+	mtc1 $a2,$f0 # konwersja z int na float
+	move $s0,$a2  # move x2 to stack
+	sub $s0,$s0,$a0 # x2 - x1
+	
+	mul.s $f0,$f0,$f3 # x*sin
+	
+	mul $s0,$s0,7	#x*7	
+	div $s0,$s0,8 # x/8
+	
+	mtc1 $a3,$f1
+	move $s1,$a3  # move y2 to stack
+	sub $s1,$s1,$a1 # y2 - y1
+
+	mul.s $f1,$f1,$f2 # y*cos
+	div $s1,$s1,2 #y*cos
+	
+	sub.s $f0,$f1,$f0
+	sub $s0,$s1,$s0
+
+	mfc1 $v1,$f0 # konwersja z float na int
+	add $s0, $s0,$a1 # y2 + y1
+	move $v1,$s0 # result y2
+		 	 
+	move $a3,$v1
+	move $a2,$v0
+	
+	jal case
 case:
 #increase index 
     addi $t0, $t0, 1
+
     j inst_loop 
 
 rotate:
-	mul $v0,$a0,2
-	mul $v1,$a1,3
+	mtc1 $a0,$f0 # konwersja z int na float
+	l.s $f2 cos
+	l.s $f3 sin
+	mul.s $f0,$f0,$f2 # x*cos
+	mtc1 $a1,$f1
+	mul.s $f1,$f1,$f3 # y*sin
+	sub.s $f0,$f0,$f1
+	abs.s $f0,$f0
+	mfc1 $v0,$f0 # konwersja z float na int
+	
+	mtc1 $a0,$f0 # konwersja z int na float
+	mul.s $f0,$f0,$f3 # x*sin
+	mtc1 $a1,$f1
+	mul.s $f1,$f1,$f2 # y*cos
+	add.s $f0,$f0,$f1
+	mfc1 $v1,$f0 # konwersja z float na int
+	
 	jr $ra
 
 forward:
-	mul $v0,$a0,1
-	mul $v1,$a1,1
+	move $a0, $k0							
+    	move $a1, $k1
+	li $t9, 0x00FF0000
+
+	add $a2,$a2,$a0
+    	add $a3,$a3,$a1
+	move $v0, $a2							
+    	move $v1, $a3
+    
+    	add $a0,$a0,200		
+    	add $a1,$a1,200	
+    	add $a2,$a2,200	
+    	add $a3,$a3,200	
+	addiu $sp, $sp, -4		
+	sw $t9, ($sp)
+	jal drawline
 	
-	add $v0,$v0,$a2
-	add $v1,$v0,$a3
-	jr $ra
+	
+	move $a0, $k0
+	move $a1, $k1
+	
+    	move $a2, $v0							
+    	move $a3, $v1
+    		
+    	move $k0, $a2
+    	move $k1, $a3
+	j case
 			
 primitiveran:
+	add $a0,$a0,200		
+    	add $a1,$a1,200	
+    	add $a2,$a2,200	
+    	add $a3,$a3,200
 	li $v0, 10         		# Sets $v0 in preperation for a system call.
       	syscall 			# Exits the program
 setpixel:
@@ -190,8 +308,6 @@ drawline:
 	b sxcomplete			# Branch around the sxelse section
 	nop
 	
-	j primitiveran
-	nop
 	
 sxelse:				# Branches to here if x0 is greater than x1
 	li $s7, -1		# Sets the value of sx ($s7) to -1	
