@@ -15,14 +15,14 @@ bitmapreset: .asciiz "\nRemember to reset the bitmap display if running again\n"
 cos:  .float  0.5  
 sin:  .float  0.865
 distance: .float 200.0
-input: .asciiz "F+F-F"
+input: .asciiz "+F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F"
 	.text
 
 main:		
 	li $t0, 0
 	li $a0, 0			
    	li $a1,	0
-	li $a2, 50		
+	li $a2, 20		
    	li $a3, 1
    	li $k0, 0
    	li $k1, 0
@@ -185,19 +185,24 @@ rotate:
 	jr $ra
 
 forward:
-	move $a0, $k0							
-    	move $a1, $k1
+	
+  
 	li $t9, 0x00FF0000
 
-	add $a2,$a2,$a0
-    	add $a3,$a3,$a1
+	add $a2,$a2,$k0
+    	add $a3,$a3,$k1
+    	sub $a2,$a2,$a0
+    	sub $a3,$a3,$a1
+    	move $a0, $k0							
+    	move $a1, $k1
+    	
 	move $v0, $a2							
     	move $v1, $a3
     
-    	add $a0,$a0,200		
-    	add $a1,$a1,200	
-    	add $a2,$a2,200	
-    	add $a3,$a3,200	
+    	add $a0,$a0,100		
+    	add $a1,$a1,100	
+    	add $a2,$a2,100	
+    	add $a3,$a3,100
 	addiu $sp, $sp, -4		
 	sw $t9, ($sp)
 	jal drawline
@@ -211,6 +216,7 @@ forward:
     		
     	move $k0, $a2
     	move $k1, $a3
+    
 	j case
 			
 primitiveran:
