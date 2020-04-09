@@ -15,7 +15,8 @@ bitmapreset: .asciiz "\nRemember to reset the bitmap display if running again\n"
 cos:  .float  0.5  
 sin:  .float  0.865
 distance: .float 200.0
-input: .asciiz "+F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F"
+input: .asciiz "+F+F--"
+input2: .asciiz "+F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F"
 	.text
 
 main:		
@@ -477,4 +478,3 @@ save_bmp:
 	lw $ra, 4($sp)		#restore (pop) $ra
 	add $sp, $sp, 4
 	jr $ra
-
