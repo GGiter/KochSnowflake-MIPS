@@ -1,480 +1,420 @@
-.eqv BMP_FILE_SIZE 2500000
-	.data
-fname:	.asciiz "source.bmp"
-bitmaparea: .space BMP_FILE_SIZE # Reserve the data section being used by the bitmap display (512 x 256 bytes)	
-display1: .asciiz "\nEnter 1 to run the setpixel subroutine "
-display2: .asciiz "\nEnter 2 to run the drawline subroutine"
-display3: .asciiz "\nEnter 3 to run the drawrectangle subroutine"
-display4: .asciiz "\nEnter 4 to run the drawpolygon subroutine"
-display5: .asciiz "\nEnter 5 to run the fillrectangle subroutine"
-display6: .asciiz "\nEnter 6 to run the drawcircle subroutine"
-display7: .asciiz "\nEnter 7 to run the fillcircle subroutine"
-display8: .asciiz "\nEnter 8 to run the dashedline subroutine\n"
-runagain: .asciiz "\nTo run another drawing primative enter 1, to exit enter 2"
-bitmapreset: .asciiz "\nRemember to reset the bitmap display if running again\n"
-cos:  .float  0.5  
-sin:  .float  0.865
-distance: .float 200.0
-input: .asciiz "+F+F--"
-input2: .asciiz "+F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F"
-	.text
+#############################################################################
+# Koch Snowflake generator using simplified L-System and Bresenham algorithm
+# ARKO project
+# Author : Piotr Gêbuœ
+################################################################################	
+		.data
+		.align 4
+buff:		.space 4
+offset:		.space 4
+size:		.space 4
+width:		.space 4
+begging:	.space 4
+x1:	.space 4
+y1:	.space 4
+x2:	.space 4
+y2:	.space 4
+dy:	.space 4
+value1:	.space 4
+value2:	.space 4
+last_x2:	.space 4
+last_y2:	.space 4
+last_x1:	.space 4
+last_y1:	.space 4
+axis:	.space 4
+wrongFile: .asciiz "Invalid input file."
+fileNameIn:	.asciiz "in.bmp"
+fileNameOut:	.asciiz "out.bmp"
+input: .asciiz "+F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F"
+		.text
 
-main:		
-	li $t0, 0
-	li $a0, 0			
-   	li $a1,	0
-	li $a2, 20		
-   	li $a3, 1
-   	li $k0, 0
-   	li $k1, 0
+main:
+	# open file 'in.bmp':
+	la $a0, fileNameIn
+	li $a1, 0
+	li $a2, 0
+	li $v0, 13
+	syscall	
+	move $t1, $v0 		# move descriptor to $t1
+	bltz $t1, fileExc # if the file is invalid exit
+	# read 'BM' bytes :
+	move $a0, $t1
+	la $a1, buff
+	li $a2, 2
+	li $v0, 14
+	syscall
+	# read 4 bytes that determine the size
+	move $a0, $t1
+	la $a1, size
+	li $a2, 4
+	li $v0, 14
+	syscall
+	lw $s0, size		# save size $s0
+	# allocate memory of the file size :
+	move $a0, $s0
+	li $v0, 9
+	syscall
+	move $s1, $v0		
+	sw $s1, begging
+	# read 4 reserved bytes:
+	move $a0, $t1		
+	la $a1, buff
+	li $a2, 4
+	li $v0, 14
+	syscall
+	# read offset:
+	move $a0, $t1
+	la $a1, offset
+	li $a2, 4
+	li $v0, 14
+	syscall
+	# read information header :
+	move $a0, $t1
+	la $a1, buff
+	li $a2, 4
+	li $v0, 14
+	syscall
+	# read width:
+	move $a0, $t1
+	la $a1, width
+	li $a2, 4
+	li $v0, 14
+	syscall
+	lw $s2, width			
+	# read height:
+	move $a0, $t1
+	la $a1, buff
+	li $a2, 4
+	li $v0, 14
+	syscall
+	# close the file
+	move $a0, $t1
+	li $v0, 16
+	syscall
+	# read pixel array
+	la $a0, fileNameIn
+	la $a1, 0
+	la $a2, 0
+	li $v0, 13
+	syscall
+	move $t1, $v0
+	move $a0, $t1
+	la $a1, ($s1)
+	la $a2, ($s0)		
+	li $v0, 14
+	syscall
+	lw $s0, size
+	move $a0, $t1		# close the file
+	li $v0, 16
+	syscall
+	lw $s5, offset		# load offset to $s5
+	li $t7, 0		#  counter set to 0
+	lw $s2, width
+	add $s1, $s1, $s5	# go to the start of pixel array
+	li $s6, 4
+	div $s2, $s6		# set padding 
+	mfhi $s6		# padding
 	
-	jal inst_loop
+	
+	li $t8, 0	# index for reading input string
+	li $a0, 0	# start.x		
+   	li $a1,	0	# start.y
+	li $a2, 17	# end.x	
+   	li $a3, 0	# end.y
+   	sw $a0,last_x1
+   	sw $a1,last_y1
 
-inst_loop:
+	jal inst_oxloop
+	
+inst_oxloop:
 	# iterate through series
-    	lb $t1, input($t0)
-   	beq $t1, 0, primitiveran
-	# change lower case character to '*'
-	
-	beq $t1,'+',rotate_right
-	beq $t1,'-',rotate_left
-
-   	beq $t1,'F',forward
-	
-   	j case 
-    	sb $t1, input($t0)
-		
+    	lb $t9, input($t8)
+    	# save file if the input ended
+   	beq $t9, 0, saveFile		
+	beq $t9,'+',rotate_right
+	beq $t9,'-',rotate_left
+   	beq $t9,'F',forward
+   	jal case 
+    	sb $t9, input($t8)	
 rotate_right:
-
+	# save values as there are too many variables
+	sw $s0, value1
+	sw $s1, value2
 	
-	mtc1 $a2,$f0 # konwersja z int na float
 	move $s0,$a2 # move x2 to stack
 	sub $s0,$s0,$a0 # x2 - x1
-	l.s $f2 cos # save cos
-	l.s $f3 sin # save sin
-	
+
 	div $s0,$s0,2  # x*cos
-	
-	mul.s $f0,$f0,$f2 # x*cos
-	mtc1 $a3,$f1
-	
+		
 	move $s1,$a3 # move y2 to stack
 	sub $s1,$s1,$a1 # y2 - y1
 	
 	mul $s1,$s1,7 # y*7
 	div $s1,$s1,8 # y/8
-	
-	mul.s $f1,$f1,$f3 # y*sin
-	
-	sub.s $f0,$f0,$f1 
-	
+		
 	sub $s0,$s0,$s1 # x*cos - y*sin
 
-	mfc1 $v0,$f0 # konwersja z float na int
 	add $s0, $s0,$a0 # y2 + y1
 	move $v0,$s0 # resutl x2
-	
-	mtc1 $a2,$f0 # konwersja z int na float
+
 	move $s0,$a2  # move x2 to stack
 	sub $s0,$s0,$a0 # x2 - x1
-	
-	mul.s $f0,$f0,$f3 # x*sin
-	
+
 	mul $s0,$s0,7	#x*7	
 	div $s0,$s0,8 # x/8
 	
-	mtc1 $a3,$f1
 	move $s1,$a3  # move y2 to stack
 	sub $s1,$s1,$a1 # y2 - y1
 
-	mul.s $f1,$f1,$f2 # y*cos
 	div $s1,$s1,2 #y*cos
 	
-	add.s $f0,$f0,$f1
-	add $s0,$s0,$s1
+	add $s0,$s0,$s1 # x*cos + y*sin
 
-	mfc1 $v1,$f0 # konwersja z float na int
 	add $s0, $s0,$a1 # y2 + y1
 	move $v1,$s0 # result y2
-		 	 
+	
+	# new end.x and end.y 	 
 	move $a3,$v1
 	move $a2,$v0
+
+	# load saved values
+	lw $s0, value1
+	lw $s1, value2
 	
 	jal case
 rotate_left:
+	# save values as there are too many variables
+	sw $s0, value1
+	sw $s1, value2
 
-	
-	mtc1 $a2,$f0 # konwersja z int na float
 	move $s0,$a2 # move x2 to stack
 	sub $s0,$s0,$a0 # x2 - x1
-	l.s $f2 cos # save cos
-	l.s $f3 sin # save sin
 	
 	div $s0,$s0,2  # x*cos
-	
-	mul.s $f0,$f0,$f2 # x*cos
-	mtc1 $a3,$f1
 	
 	move $s1,$a3 # move y2 to stack
 	sub $s1,$s1,$a1 # y2 - y1
 	
 	mul $s1,$s1,7 # y*7
 	div $s1,$s1,8 # y/8
-	
-	mul.s $f1,$f1,$f3 # y*sin
-	
-	add.s $f0,$f0,$f1 
-	
+		
 	add $s0,$s0,$s1 # x*cos + y*sin
 
-	mfc1 $v0,$f0 # konwersja z float na int
 	add $s0, $s0,$a0 # x2 + x1
 
 	move $v0,$s0 # resutl x2
 	
-	mtc1 $a2,$f0 # konwersja z int na float
 	move $s0,$a2  # move x2 to stack
 	sub $s0,$s0,$a0 # x2 - x1
-	
-	mul.s $f0,$f0,$f3 # x*sin
-	
+		
 	mul $s0,$s0,7	#x*7	
 	div $s0,$s0,8 # x/8
 	
-	mtc1 $a3,$f1
 	move $s1,$a3  # move y2 to stack
 	sub $s1,$s1,$a1 # y2 - y1
 
-	mul.s $f1,$f1,$f2 # y*cos
 	div $s1,$s1,2 #y*cos
 	
-	sub.s $f0,$f1,$f0
-	sub $s0,$s1,$s0
+	sub $s0,$s1,$s0 # y*cos - x*sin
 
-	mfc1 $v1,$f0 # konwersja z float na int
 	add $s0, $s0,$a1 # y2 + y1
 	move $v1,$s0 # result y2
-		 	 
+	
+	# new end.x and end.y 	 
 	move $a3,$v1
 	move $a2,$v0
+
+	# load saved values
+	lw $s0, value1
+	lw $s1, value2
 	
 	jal case
 case:
-#increase index 
-    addi $t0, $t0, 1
-
-    j inst_loop 
-
-rotate:
-	mtc1 $a0,$f0 # konwersja z int na float
-	l.s $f2 cos
-	l.s $f3 sin
-	mul.s $f0,$f0,$f2 # x*cos
-	mtc1 $a1,$f1
-	mul.s $f1,$f1,$f3 # y*sin
-	sub.s $f0,$f0,$f1
-	abs.s $f0,$f0
-	mfc1 $v0,$f0 # konwersja z float na int
-	
-	mtc1 $a0,$f0 # konwersja z int na float
-	mul.s $f0,$f0,$f3 # x*sin
-	mtc1 $a1,$f1
-	mul.s $f1,$f1,$f2 # y*cos
-	add.s $f0,$f0,$f1
-	mfc1 $v1,$f0 # konwersja z float na int
-	
-	jr $ra
-
+	# increase index 
+    	addi $t8, $t8, 1
+	# return to oxloop
+    	jal inst_oxloop 
 forward:
-	
-  
-	li $t9, 0x00FF0000
-
-	add $a2,$a2,$k0
-    	add $a3,$a3,$k1
+	lw $v0, last_x1							
+    	lw $v1, last_y1
+    		
+	add $a2,$a2,$v0
+    	add $a3,$a3,$v1
     	sub $a2,$a2,$a0
     	sub $a3,$a3,$a1
-    	move $a0, $k0							
-    	move $a1, $k1
+    	# x2 = x2 + last_x - x1
+    	# y2 = y2 + last_y - y1
+    	
+    	lw $a0, last_x1							
+    	lw $a1, last_y1
     	
 	move $v0, $a2							
     	move $v1, $a3
+    	
+    	sw $a2, last_x2
+	sw $a3, last_y2
     
-    	add $a0,$a0,100		
-    	add $a1,$a1,100	
-    	add $a2,$a2,100	
-    	add $a3,$a3,100
-	addiu $sp, $sp, -4		
-	sw $t9, ($sp)
-	jal drawline
+    	# shift points by vector [60,80] to center the snowflake
+    	add $a0,$a0,60		
+    	add $a1,$a1,80	
+    	add $a2,$a2,60	
+    	add $a3,$a3,80
+    	
+	jal drawLine
+end_forward:	
+	lw $a0, last_x1							
+    	lw $a1, last_y1
 	
-	
-	move $a0, $k0
-	move $a1, $k1
-	
-    	move $a2, $v0							
-    	move $a3, $v1
-    		
-    	move $k0, $a2
-    	move $k1, $a3
+	lw $a2, last_x2
+	lw $a3, last_y2
+
+    	sw $a2 , last_x1
+    	sw $a3 , last_y1
     
 	j case
-			
-primitiveran:
-	add $a0,$a0,200		
-    	add $a1,$a1,200	
-    	add $a2,$a2,200	
-    	add $a3,$a3,200
-	li $v0, 10         		# Sets $v0 in preperation for a system call.
-      	syscall 			# Exits the program
-setpixel:
-																									
-	# Stores the values of the s registers in the stack so they can be used in the subroutine
-												
-	addiu $sp, $sp, -24	# Decrement the stack pointer
-	sw $ra, 20($sp)		# Save the value of the return address to the stack
-	sw $s0, 16($sp)		# Save the original value of $s0 to the stack
-	sw $s1, 12($sp)		# Save the original value of $s1 to the stack
-	sw $s2, 8($sp)		# Save the original value of $s2 to the stack
-	sw $s3, 4($sp)		# Save the original value of $s3 to the stack
-	sw $s4, ($sp)		# Save the original value of $s4 to the stack
-	
-	
-	# Copies the values of the parameters passed in into the now free s registers
-	
-	move $s0, $a0		# Store the x co-ordinate in $s0
-	move $s1, $a1		# Store the y co-ordinate in $s1
-	move $s2, $a2		# Store the colour in $s2
-	li $s3, 0x10010000 	# Load the base address (Top left hand pixel (x = 0, y = 0) address = 0x10010000
-		
-				
-	# The main code for drawing the pixel to the bitmap
-			
-	sll $s1, $s1, 9		# The shift of 9 turns the y co-ordinate into the bit value of it by raising 
-						# the power of the y co-ordinate to 9
-	addu $s4, $s0, $s1	# Adds x co-ordinate to the number of bits calculated by the Y co-ordinate and shift
-	sll $s4, $s4, 2		# The shift of 2 moves moves the bit value along to put the x co-ordinate 
-						# in the correct location
-	addu $s3, $s3, $s4	# Adds the value of the of the shift calculated to the base address 
-						# to reach the correct XY co-ordinates
-	sw $s2, ($s3)		# Load the colour into the specified memory address location		
-	
-					
-	# Restores the original values of the s registers from the stack						
-					
-	lw $s4, ($sp)		# Restore original value of $s4	from the stack
-	lw $s3, 4($sp)		# Restore original value of $s3 from the stack
-	lw $s2, 8($sp)		# Restore original value of $s2 from the stack
-	lw $s1, 12($sp)		# Restore original value of $s1 from the stack
-	lw $s0, 16($sp)		# Restore original value of $s0 from the stack
-	lw $ra, 20($sp)		# Restore the value of the return address from the stack
-	addiu $sp, $sp, 24	# Increment the stack pointer
-	
-	jr $ra		# Jump to the return address to exit the subroutine
-	nop
-	  		
-drawline:	
-		
-	# Stores the values of the s registers in the stack so they can be used in the subroutine
-	
-	addiu $sp, $sp, -52	# Decrement the stack pointer
-	sw $ra, 48($sp)		# Save the value of the return address ($ra) to the stack
-	sw $s0, 44($sp)		# Save the original value of $s0 to the stack
-	sw $s1, 40($sp)		# Save the original value of $s1 to the stack
-	sw $s2, 36($sp)		# Save the original value of $s2 to the stack
-	sw $s3, 32($sp)		# Save the original value of $s3 to the stack
-	sw $s4, 28($sp)		# Save the original value of $s4 to the stack
-	sw $s5, 24($sp)		# Save the original value of $s5 to the stack
-	sw $s6, 20($sp)		# Save the original value of $s6 to the stack
-	sw $s7, 16($sp)		# Save the original value of $s7 to the stack
-	sw $t0, 12($sp)		# Save the original value of $t0 to the stack
-	sw $t1, 8($sp)		# Save the original value of $t1 to the stack
-	sw $t2, 4($sp)		# Save the original value of $t2 to the stack
-	sw $t3, ($sp)		# Save the original value of $t3 to the stack 
-	
-	# Copies the values of the parameters passed in into the now free s registers
-	
-	move $s0, $a0		# Store the x co-ordinate of point 1 in $s0
-	move $s1, $a1		# Store the y co-ordinate of point 1 in $s1
-	move $s2, $a2		# Store the x co-ordinate of point 2 in $s2
-	move $s3, $a3		# Store the y co-ordinate of point 2 in $s3
-	lw $s4, 52($sp)		# Store the colour (takes form the stack) in $s4
-	
-	
-	# Main code for drawing the line on the bitmap
-	
-	subu $t3, $s2, $s0 		# Calculates x1 - x0 and store it in $t3
-	abs $s5, $t3 			# Sets dx ($s5) to the absolute value of x1 - x0
-	subu $t3, $s3, $s1		# Calculates y1 - y0 and stores it in $t3
-	abs $s6, $t3			# Sets dy ($s6) to the absolute value of y1 - y0
-	sub, $s6, $zero, $s6 	# Sets dy to -dy as dy is needed as a minus value later in calculations
-							# it is turned minus via two's complement method
-	bgt $s0, $s2, sxelse	# If x0 is greater than x1 then branch to sxelse
-	nop
-	li $s7, 1				# Set the value of sx ($s7) to 1
-	b sxcomplete			# Branch around the sxelse section
-	nop
-	
-	
-sxelse:				# Branches to here if x0 is greater than x1
-	li $s7, -1		# Sets the value of sx ($s7) to -1	
-
-sxcomplete:					# Branches to here if x1 was greater than x0
-	bgt $s1, $s3, syelse	# If y0 is greater than y1 then branch to syelse
-	nop
-	li $t0, 1				# Sets the value of sy ($t0) to 1 
-	b sycomplete			# Branch around the syelse section
-	nop
-	
-syelse:				# Branche shere is y0 is greater than y1
-	li $t0, -1		# Sets the value sy ($t0) to -1
-	
-sycomplete:				# Branches to here if y1 was greater than y0
-	addu $t1, $s5, $s6	# err is set to the value of dx - dy
-drawpixelloop:
-	move $a0, $s0		# Store the x co-ordinate in $a0
-	move $a1, $s1		# Store the y co-ordinate in $a1
-	move $a2, $s4		# Store the colour in $a2
-	
-	jal setpixel		# Enter the subroutine "setpixel"
-	nop
-	
-	add $t2, $t1, $t1					# Sets e2 ($t2) to err ($t1) * 2 by calculating err + err   
-	bgt $s6, $t2, e2notgreaterthandy	# Branch if -dy is greater than e2
-	nop
-	add $t1, $t1, $s6					# Calculate err = err - dy: err = $t1 , -dy = $s6
-	add $s0, $s0, $s7					# Calculate x0 = x0 + sx: x0 = $s0 , sx = $s7
-	
-e2notgreaterthandy:	
-	bgt $t2, $s5, e2greaterthandx		# Branch if e2 ($t2) is greater than dx ($s5)
-	nop 
-	add $t1, $t1, $s5					# Calculate err = derr + dx: err = $t1 , dx = $s5
-	add $s1, $s1, $t0  					# Caluclate y0 = y0 + sy: y0 = $s1 , sy = $t0
-e2greaterthandx:
-	
-	# To exit the loop x0 must now be equal to x1 and y0 much now be equal to y1
-	# The two statements must be true to pass both branches and thus exits the loop
-	
-	bne $s0, $s2, drawpixelloop	# If x0 ($s0) and x1 ($s2) are not 
-	nop							# equal branch to drawpixelloop
-	bne $s1, $s3, drawpixelloop	# If y0 ($s1) and y1 ($s3) are not
-	nop							# equal branch to drawpixelloop
-	
-	# Restores the original values of the s registers from the stack
-	
-	lw $t3, ($sp)		# Restore the original value of $t3 from the stack
-	lw $t2, 4($sp)		# Restore the original value of $t2 from the stack
-	lw $t1, 8($sp)		# Restore the original value of $t1 from the stack
-	lw $t0, 12($sp)		# Restore the original value of $t0 from the stack
-	lw $s7, 16($sp)		# Restore the original value of $s7 from the stack 
-	lw $s6, 20($sp)		# Restore the original value of $s6 from the stack
-	lw $s5, 24($sp)		# Restore the original value of $s5 from the stack
-	lw $s4, 28($sp)		# Restore the original value of $s4 from the stack
-	lw $s3, 32($sp)		# Restore the original value of $s3 from the stack
-	lw $s2, 36($sp)		# Restore the original value of $s2 from the stack
-	lw $s1, 40($sp)		# Restore the original value of $s1 from the stack
-	lw $s0, 44($sp)		# Restore the original value of $s0 from the stack
-	lw $ra, 48($sp)		# Restore the value of the return address ($ra) from the stack
-	addiu $sp, $sp, 56	# Increment the stack pointer, taking itnto account the parameter pushed onto the stack
-	
-	jr $ra 		# Jump to the return address to exit the subroutine
-	nop
-	
-
-
-
-
-xequalsy:			# Jumps to here if x and y are equal
-
-	# Restores the original values of the s registers from the stack
-
-	lw $s4, ($sp)		# Restore the original value of $s4 from the stack
-	lw $s3, 4($sp)		# Restore the original value of $s3 from the stack
-	lw $s2, 8($sp)		# Restore the original value of $s2 from the stack
-	lw $s1, 12($sp)		# Restore the original value of $s1 from the stack
-	lw $s0, 16($sp)		# Restore the original value of $s0 from the stack
-	lw $ra, 20($sp)		# Restore the value of the return address ($ra) from the stack
-	addiu $sp, $sp, 28	# Increment the stack pointer, taking itnto account the parameter pushed onto the stack
-
-	jr $ra
-	nop	
-	
-	
-xiszero:			# Branches here if x equals zero
-
-	sub $s6, $s1, $s3	# Set tempY to cy - y
-	
-	la $a0, ($s5)		# Load tempX into the $a0 register (cx - x)
-	la $a1, ($s6)		# Load tempY into the $a1 register (cy - y)
-	la $a2, ($s4)		# Load the colour into the $a2 register
-	
-	jal setpixel		# Enter the Subroutine "setpixel"
-	nop
-
-	beqz $s3, yiszero	# Branch if y is equal to zero
-	nop
-
-	add $s5, $s0, $s2	# Set tempX to cx + x
-	
-	la $a0, ($s5)		# Load tempX into the $a0 register (cx + x)
-	la $a1, ($s6)		# Load tempY into the $a1 register (cy - y)
-	la $a2, ($s4)		# Load the colour into the $a2 register
-	
-	jal setpixel		# Enter the Subroutine "setpixel"
-	nop
-
-yiszero:			# Branches here if y equals zero
-	
-	# Restores the original values of the s registers from the stack
-	
-	lw $s6, ($sp)		# Restore the original value of $s6 from the stack
-	lw $s5, 4($sp)		# Restore the original value of $s5 from the stack
-	lw $s4, 8($sp)		# Restore the original value of $s4 from the stack
-	lw $s3, 12($sp)		# Restore the original value of $s3 from the stack
-	lw $s2, 16($sp)		# Restore the original value of $s2 from the stack
-	lw $s1, 20($sp)		# Restore the original value of $s1 from the stack
-	lw $s0, 24($sp)		# Restore the original value of $s0 from the stack
-	lw $ra, 28($sp)		# Restore the value of the return address ($ra) from the stack
-	addiu $sp, $sp, 36	# Increment the stack pointer, taking itnto account the parameter pushed onto the stack
-
-
-	jr $ra			# Jump to the return address to exit the subroutine
-	nop	
-	
-save_bmp:
-#description: 
-#	saves bmp file stored in memory to a file
-#arguments:
-#	none
-#return value: none
-	sub $sp, $sp, 4		#push $ra to the stack
-	sw $ra,4($sp)
-	sub $sp, $sp, 4		#push $s1
-	sw $s1, 4($sp)
-#open file
+# Bresenham algorithm
+drawLine:
+	# move arguments
+	move $t0 , $a0 # x1
+	move $t1 , $a1 # y1
+	move $t2 , $a2 # x2
+	move $t3 , $a3 # y2
+	la $t4, ($t0)	
+	la $t5, ($t1)	# x -> t4, y,-> t5
+	bge $t0, $t2, x1greater		# if x1 >= x2 go to else
+	li $t6, 1		# xi = 1
+	sub $t7, $t2, $t0	# dx = x2 - x1 , calculate offset
+	b next1		
+x1greater:
+	li $t6, -1		# xi = -1
+	sub $t7, $t0, $t2	# dx = x1 - x2 , calculate offset
+next1:
+	bge $t1, $t3, y2greater	# if (y1<y2) go to else2
+	li $s0, 1		# yi = 1
+	sub $s7, $t3, $t1 	# dy = y2 - y1 , calculate offse
+	b next2	
+y2greater:
+	li $s0, -1		# yi = -1
+	sub $s7, $t1, $t3	# dy = y2 - y1
+	b next2
+next2:	
+	bge $s7, $t7, else1
+	li $v0 , 1
+	sw $v0 , axis
+	#OX
+	sub $s2, $s7, $t7	# ai = dy-dx
+	sll $s2, $s2, 1		# ai = 2*ai
+	sll $s3, $s7, 1		# bi = 2*dy
+	sub $s4, $s3, $t7	# d = bi - dx
+	b axis_determiner
+axis_determiner:
+	lw $a0,axis
+	blez $a0, oyloop
+	b oxloop
+oxloop:
+	beq $t2, $t4, back 	# while(x!=x2)
+	bltz $s4, else2		# if(d>=0), go lower
+	add $t4, $t6, $t4	# x += xi
+	add $t5, $s0, $t5	# y += yi
+	add $s4, $s2, $s4	# d +=ai
+	b next3
+else2:
+	add $s4, $s3, $s4	#d += bi
+	add $t4, $t6, $t4	#x += xi
+next3:
+	# reset the values
+	sw $t0, x1		
+	sw $t1, y1
+	sw $t2, x2
+	sw $t3, y2
+	sw $s7, dy
+coloring:			
+	lw $s5, width		#witdth
+	move $t1, $t4		# x
+	move $t2, $t5		# y
+	li $t3, 0		# counter
+	subi $t1, $t1, 1	# x--
+	blez $t1, xpositive		
+xnegative:
+	addi $t3, $t3, 3	# counter +3
+	subi $t1, $t1, 1	# x-- 
+	bgtz $t1, xnegative	# do while x <= 0
+xpositive:
+	li $t0, 0		# counter
+	subi $t2, $t2, 1	# y--
+	blez $t2, xpositive	
+ynegative:
+	add $t0, $t0, $s5	# 3*width  y-1 times
+	add $t0, $t0, $s5
+	add $t0, $t0, $s5
+	add $t0, $t0, $s6	# s6 -> padding, 
+	subi $t2, $t2, 1	# y--
+	bgtz $t2, ynegative
+ypositive:
+	add $t3, $t3, $t0	
+	add $s1, $s1, $t3	# first bit of pixel x,y
+	li $s7, 0		# color value ( black )
+	sb $s7, ($s1)
+	addi $s1, $s1, 1	# BGR coloring
+	sb $s7, ($s1)
+	addi $s1, $s1, 1
+	sb $s7, ($s1)
+	subi $s1, $s1, 2	# black coloring
+	sub $s1, $s1, $t3	# reset
+	# reset the values
+	lw $t0, x1
+	lw $t1, y1
+	lw $t2, x2
+	lw $t3, y2
+	lw $s7, dy
+	b axis_determiner
+else1:
+	# OY
+	li $v0 , 0
+	sw $v0,axis
+	sub $s2, $t7, $s7	# ai = dx - dy
+	sll $s2, $s2, 1		# ai = 2*ai
+	sll $s3, $t7, 1		# bi = 2*dx
+	sub $s4, $s3, $s7	# d = bi - dy
+	b axis_determiner
+oyloop:
+	beq $t3, $t5, back	# while(y!=y2)
+	bltz $s4, else3		# if(d>=0), go up
+	add $t4, $t6, $t4	# x += xi
+	add $t5, $s0, $t5	# y += yi
+	add $s4, $s2, $s4	# d +=ai
+	b next3
+else3:
+	add $s4, $s3, $s4	# d +=bi
+	add $t5, $t5, $s0	# y += yi
+	b next3
+fileExc:		# error messege to display when in.bmp is invalid
+	li $v0, 4
+	la $a0, wrongFile 
+	syscall # print error message
+	b end
+back:
+	j end_forward
+saveFile:
+	# open "out.bmp"
+	la $a0, fileNameOut
+	li $a1, 1
+	li $a2, 0
 	li $v0, 13
-        la $a0, fname		#file name 
-        li $a1, 1		#flags: 1-write file
-        li $a2, 0		#mode: ignored
-        syscall
-	move $s1, $v0      # save the file descriptor
-	
-
-
-#save file
+	syscall		
+	move $t0, $v0
+	bltz $t0, fileExc # if .bmp is invalid
+	lw $s0, size
+	lw $s1, begging
+	move $a0, $t0
+	la $a1, ($s1)	# buffer to save
+	la $a2, ($s0)	# number of symbols
 	li $v0, 15
-	move $a0, $s1
-	la $a1, bitmaparea
-	li $a2, BMP_FILE_SIZE
-	syscall
-
-#close file
+	syscall		# save
+	move $a0, $t0
 	li $v0, 16
-	move $a0, $s1
-        syscall
-	
-	lw $s1, 4($sp)		#restore (pop) $s1
-	add $sp, $sp, 4
-	lw $ra, 4($sp)		#restore (pop) $ra
-	add $sp, $sp, 4
-	jr $ra
+	syscall		# close the file
+end:
+	# close program:
+	li $v0, 10
+	syscall
