@@ -4,7 +4,7 @@ buff:		.space 4
 offset:		.space 4
 size:		.space 4
 width:		.space 4
-poczatek:	.space 4
+begging:	.space 4
 value1:	.space 4
 value2:	.space 4
 value3:	.space 4
@@ -12,8 +12,11 @@ value4:	.space 4
 value5:	.space 4
 value6:	.space 4
 value7:	.space 4
-value8:	.space 4
-value9:	.space 4
+last_x2:	.space 4
+last_y2:	.space 4
+last_x1:	.space 4
+last_y1:	.space 4
+axis:	.space 4
 wrongFile: .asciiz "Invalid input file."
 fileNameIn:	.asciiz "in.bmp"
 fileNameOut:	.asciiz "out.bmp"
@@ -49,8 +52,8 @@ main:
 	li $v0, 9
 	syscall
 	move $s1, $v0		
-	sw $s1, poczatek
-	# odczytanie 4 bajtow zarezerwowanych:
+	sw $s1, begging
+	# read 4 reserved bytes:
 	move $a0, $t1		
 	la $a1, buff
 	li $a2, 4
@@ -106,17 +109,19 @@ main:
 	lw $s2, width
 	add $s1, $s1, $s5	# go to the start of pixel array
 	li $s6, 4
-	div $s2, $s6		#set padding 
+	div $s2, $s6		# set padding 
 	mfhi $s6		# padding
 	
 	
 	li $t8, 0	# index for reading input string
 	li $a0, 0	# start.x		
    	li $a1,	0	# start.y
-	li $a2, 20	# end.x	
+	li $a2, 17	# end.x	
    	li $a3, 0	# end.y
    	li $k0, 0	# last start.x
    	li $k1, 0	# last start.y
+   	sw $a0,last_x1
+   	sw $a1,last_y1
 
 	jal inst_loop
 	
@@ -229,36 +234,42 @@ case:
 #return to loop
     jal inst_loop 
 
-forward:	
-	add $a2,$a2,$k0
-    	add $a3,$a3,$k1
+forward:
+	lw $v0, last_x1							
+    	lw $v1, last_y1
+    		
+	add $a2,$a2,$v0
+    	add $a3,$a3,$v1
     	sub $a2,$a2,$a0
     	sub $a3,$a3,$a1
-    	move $a0, $k0							
-    	move $a1, $k1
+    	# x2 = x2 + last_x - x1
+    	# y2 = y2 + last_y - y1
+    	
+    	lw $a0, last_x1							
+    	lw $a1, last_y1
     	
 	move $v0, $a2							
     	move $v1, $a3
     	
-    	sw $v0, value8
-	sw $v1, value9
+    	sw $a2, last_x2
+	sw $a3, last_y2
     
-    	# shift points by vector [100,100]
-    	add $a0,$a0,100		
-    	add $a1,$a1,100	
-    	add $a2,$a2,100	
-    	add $a3,$a3,100
+    	# shift points by vector [80,80]
+    	add $a0,$a0,80		
+    	add $a1,$a1,80	
+    	add $a2,$a2,80	
+    	add $a3,$a3,80
     	
 	jal drawLine
 end_forward:	
-	move $a0, $k0
-	move $a1, $k1
+	lw $a0, last_x1							
+    	lw $a1, last_y1
 	
-	lw $a2, value8
-	lw $a3, value9
+	lw $a2, last_x2
+	lw $a3, last_y2
 
-    	move $k0, $a2
-    	move $k1, $a3
+    	sw $a2 , last_x1
+    	sw $a3 , last_y1
     
 	j case
 # Bresenham algorithm
@@ -267,194 +278,119 @@ drawLine:
 	move $t1 , $a1 #y1
 	move $t2 , $a2 #x2
 	move $t3 , $a3 #y2
-	la $t4, ($t0)	# zmienne x i y na ktorych bedziemy operowac
-	la $t5, ($t1)	# tu x to t4, y, to t5
-	bge $t0, $t2, else		# jak wieksze lub rowne t0(x1) od t2(x2), to else
+	la $t4, ($t0)	
+	la $t5, ($t1)	# x -> t4, y,-> t5
+	bge $t0, $t2, x1greater		# if x1 >= x2 go to else
 	li $t6, 1		#xi = 1
-	sub $t7, $t2, $t0	#dx = x2 - x1
-	b next		# tu xi to t6 , dx to t7
-else:
+	sub $t7, $t2, $t0	#dx = x2 - x1 , calculate offset
+	b next		
+x1greater:
 	li $t6, -1		#xi = -1
-	sub $t7, $t0, $t2	#dx = x1 - x2
+	sub $t7, $t0, $t2	#dx = x1 - x2 , calculate offset
 next:
-	bge $t1, $t3, else2	#if(y1<y2)
+	bge $t1, $t3, y2greater	#if (y1<y2) go to else2
 	li $s0, 1		#yi = 1
-	sub $s7, $t3, $t1 	#dy = y2 - y1
-	b next2	# tu yi, to s0, a dy to s7
-else2:
+	sub $s7, $t3, $t1 	#dy = y2 - y1 , calculate offse
+	b next3	
+y2greater:
 	li $s0, -1		#yi = -1
 	sub $s7, $t1, $t3	#dy = y2 - y1
-next2:	#algorytm korzysta z 13 zmiennych, konieczny zapis
-	sw $t0, value1	#x1
-	sw $t1, value2	#y1
-	sw $t2, value3	#x2
-	sw $t3, value4	#y2
-	sw $s7, value5	#dy
-kolorowanie:			# obliczamy (y-1)*(3*szerokosc+padding)+3*(x-1)
-	lw $s5, width		#szerokosc
-	move $t1, $t4		#x
-	move $t2, $t5		#y
-	li $t3, 0		#licznik do wyliczania piksela
-	subi $t1, $t1, 1	#x--
-	blez $t1, paf		#if(x>0) , to wchodzimy w puf
-puf:
-	addi $t3, $t3, 3	#+3
-	subi $t1, $t1, 1	#x-- w petli
-	bgtz $t1, puf		#petla az t1(x) <= 0
-paf:
-	li $t0, 0		#licznik
-	subi $t2, $t2, 1	#y--
-	blez $t2, pok		#jak t2(y) <= 0 , to omijamy pam
-pam:
-	add $t0, $t0, $s5	#dodajemy potrojna szerokosc tyle razy ile y-1
-	add $t0, $t0, $s5
-	add $t0, $t0, $s5
-	add $t0, $t0, $s6		## s6 to padding, 
-	subi $t2, $t2, 1	#y--
-	bgtz $t2, pam
-pok:
-	add $t3, $t3, $t0	#suma dwoch powyzszych wyrazen
-	add $s1, $s1, $t3		#pierwszy bit piksela x,y
-	li $s7, 0		# value do kolorowania, 0 0 0 to czarny
-	sb $s7, ($s1)
-	addi $s1, $s1, 1	#kolorowaine BGR W pikselu
-	sb $s7, ($s1)
-	addi $s1, $s1, 1
-	sb $s7, ($s1)
-	subi $s1, $s1, 2			## kolorowanie na czarno
-	sub $s1, $s1, $t3	# powrot do poczatku skad zaczynalismy
-	lw $t0, value1
-	lw $t1, value2
-	lw $t2, value3
-	lw $t3, value4
-	lw $s7, value5
-# to wyzej to rysowanie plamki o wspolrzednych t4, t5
+	b next3
 next3:	
 	bge $s7, $t7, else3
-	#tu jestesmy jak s7 < t7, czyli dy < dx, czyli os wiodaca, to OX
+	li $a0 , 1
+	sw $a0,axis
+	# dy < dx, OX
 	sub $s2, $s7, $t7	#ai = dy-dx
 	sll $s2, $s2, 1		#ai = 2*ai
 	sll $s3, $s7, 1		#bi = 2*dy
 	sub $s4, $s3, $t7	#d = bi - dx
+	b axis_determiner
+axis_determiner:
+	lw $a0,axis
+	blez $a0, loop2
+	b loop
 loop:
-	beq $t2, $t4, back 	#while(x!=x2)
-	bltz $s4, else4		#if(d>=0), to wchodzimy nizej
-	add $t4, $t6, $t4	#x += xi
-	add $t5, $s0, $t5	#y += yi
-	add $s4, $s2, $s4	#d +=ai
+	beq $t2, $t4, back 	# while(x!=x2)
+	bltz $s4, else4		# if(d>=0), go lower
+	add $t4, $t6, $t4	# x += xi
+	add $t5, $s0, $t5	# y += yi
+	add $s4, $s2, $s4	# d +=ai
 	b next4
 else4:
 	add $s4, $s3, $s4	#d += bi
 	add $t4, $t6, $t4	#x += xi
 next4:
-	sw $t0, value1	#algorytm korzysta z 13 zmiennych, konieczny zapis	
+	# reset the values
+	sw $t0, value1		
 	sw $t1, value2
 	sw $t2, value3
 	sw $t3, value4
 	sw $s7, value5
-kolorowanie2:			#analogiczne do wyzej (kolorowanie)
-	lw $s5, width		#szerokosc
-	move $t1, $t4		#x
-	move $t2, $t5		#y
-	li $t3, 0		#licznik do wyliczania piksela
-	subi $t1, $t1, 1	#x--
-	blez $t1, paf2		#if(x>0) , to wchodzimy w puf2
-puf2:
-	addi $t3, $t3, 3	#+3
-	subi $t1, $t1, 1	#x-- w petli
-	bgtz $t1, puf2		#petla az t1(x) <= 0
-paf2:
-	li $t0, 0		#licznik
-	subi $t2, $t2, 1	#y--
-	blez $t2, pok2		#jak t2(y) <= 0 , to omijamy pam2
-pam2:
-	add $t0, $t0, $s5	#dodajemy potrojna szerokosc tyle razy ile y-1
+coloring:			
+	lw $s5, width		#witdth
+	move $t1, $t4		# x
+	move $t2, $t5		# y
+	li $t3, 0		# counter
+	subi $t1, $t1, 1	# x--
+	blez $t1, xpositive		
+xnegative:
+	addi $t3, $t3, 3	# counter +3
+	subi $t1, $t1, 1	# x-- 
+	bgtz $t1, xnegative	# do while x <= 0
+xpositive:
+	li $t0, 0		# counter
+	subi $t2, $t2, 1	# y--
+	blez $t2, xpositive	
+ynegative:
+	add $t0, $t0, $s5	# 3*width  y-1 times
 	add $t0, $t0, $s5
 	add $t0, $t0, $s5
-	add $t0, $t0, $s6		## s6 to padding, 
-	subi $t2, $t2, 1	#y--
-	bgtz $t2, pam2
-pok2:
-	add $t3, $t3, $t0	#suma dwoch powyzszych wyrazen
-	add $s1, $s1, $t3		#pierwszy bit piksela x,y
-	li $s7, 0		# value do kolorowania, 0 0 0 to czarny
+	add $t0, $t0, $s6	# s6 -> padding, 
+	subi $t2, $t2, 1	# y--
+	bgtz $t2, ynegative
+ypositive:
+	add $t3, $t3, $t0	# suma dwoch powyzszych wyrazen
+	add $s1, $s1, $t3	# pierwszy bit piksela x,y
+	li $s7, 0		# color value ( black )
 	sb $s7, ($s1)
-	addi $s1, $s1, 1	#kolorowaine BGR W pikselu
+	addi $s1, $s1, 1	# BGR coloring
 	sb $s7, ($s1)
 	addi $s1, $s1, 1
 	sb $s7, ($s1)
-	subi $s1, $s1, 2			## kolorowanie na czarno
-	sub $s1, $s1, $t3	# powrot do poczatku skad zaczynalismy
+	subi $s1, $s1, 2	# black coloring
+	sub $s1, $s1, $t3	# reset
+	# reset the values
 	lw $t0, value1
 	lw $t1, value2
 	lw $t2, value3
 	lw $t3, value4
 	lw $s7, value5
-	# to wyzej to rysowanie plamki o wspolrzednych t4, t5
-	b loop
+	b axis_determiner
 else3:
-	# tu jestesmy jak os wiodaca, to OY
-	sub $s2, $t7, $s7	#ai = dx - dy
-	sll $s2, $s2, 1		#ai = 2*ai
-	sll $s3, $t7, 1		#bi = 2*dx
-	sub $s4, $s3, $s7	#d = bi - dy
+	# OY
+	li $a0 , 0
+	sw $a0,axis
+	sub $s2, $t7, $s7	# ai = dx - dy
+	sll $s2, $s2, 1		# ai = 2*ai
+	sll $s3, $t7, 1		# bi = 2*dx
+	sub $s4, $s3, $s7	# d = bi - dy
+	b axis_determiner
 loop2:
-	beq $t3, $t5, back	#while(y!=y2)
-	bltz $s4, else5		#if(d>=0), to wchodzi
-	add $t4, $t6, $t4	#x += xi
-	add $t5, $s0, $t5	#y += yi
-	add $s4, $s2, $s4	#d +=ai
-	b next5
+	beq $t3, $t5, back	# while(y!=y2)
+	bltz $s4, else5		# if(d>=0), go up
+	add $t4, $t6, $t4	# x += xi
+	add $t5, $s0, $t5	# y += yi
+	add $s4, $s2, $s4	# d +=ai
+	b next4
 else5:
-	add $s4, $s3, $s4	#d +=bi
-	add $t5, $t5, $s0	#y += yi
-next5:		
-	sw $t0, value1
-	sw $t1, value2
-	sw $t2, value3
-	sw $t3, value4
-	sw $s6, value5
-kolorowanie3:			# opis wyzej, analogicznie do kolorowanie
-	lw $s5, width		#szerokosc
-	move $t1, $t4		#x
-	move $t2, $t5		#y
-	li $t3, 0		#licznik do wyliczania piksela
-	subi $t1, $t1, 1	#x--
-	blez $t1, paf3		#if(x>0) , to wchodzimy w puf3
-puf3:
-	addi $t3, $t3, 3	#+3
-	subi $t1, $t1, 1	#x-- w petli
-	bgtz $t1, puf3		#petla az t1(x) <= 0
-paf3:
-	li $t0, 0		#licznik
-	subi $t2, $t2, 1	#y--
-	blez $t2, pok3		#jak t2(y) <= 0 , to omijamy pam
-pam3:
-	add $t0, $t0, $s5	#dodajemy potrojna szerokosc tyle razy ile y-1
-	add $t0, $t0, $s5
-	add $t0, $t0, $s5
-	add $t0, $t0, $s6		## s6 to padding, 
-	subi $t2, $t2, 1	#y--
-	bgtz $t2, pam3
-pok3:
-	add $t3, $t3, $t0	#suma dwoch powyzszych wyrazen
-	add $s1, $s1, $t3		#pierwszy bit piksela x,y
-	li $s7, 0		# value do kolorowania, 0 0 0 to czarny
-	sb $s7, ($s1)
-	addi $s1, $s1, 1	#kolorowaine BGR W pikselu
-	sb $s7, ($s1)
-	addi $s1, $s1, 1
-	sb $s7, ($s1)
-	subi $s1, $s1, 2			## kolorowanie na czarno
-	sub $s1, $s1, $t3	# powrot do poczatku skad zaczynalismy
-	lw $t0, value1
-	lw $t1, value2
-	lw $t2, value3
-	lw $t3, value4
-	lw $s7, value5
-# to wyzej to rysowanie plamki o wspolrzednych t4, t5	
-	b loop2	
-fileExc:		# ewentualny blad do wyswietlenia w przypadku braku lub blednego pliku in.bmp
+	add $s4, $s3, $s4	# d +=bi
+	add $t5, $t5, $s0	# y += yi
+	b next4
+fileExc:		# error messege to display when in.bmp is invalid
+	li $v0, 4
+	la $a0, wrongFile 
+	syscall # print error message
 	b end
 back:
 	j end_forward
@@ -468,7 +404,7 @@ saveFile:
 	move $t0, $v0
 	bltz $t0, fileExc
 	lw $s0, size
-	lw $s1, poczatek
+	lw $s1, begging
 	move $a0, $t0
 	la $a1, ($s1)	# buffer to save
 	la $a2, ($s0)	# number of symbols
