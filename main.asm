@@ -144,13 +144,13 @@ rotate_right:
 	move $s0,$a2 # move x2 to stack
 	sub $s0,$s0,$a0 # x2 - x1
 
-	div $s0,$s0,2  # x*cos
+	sra $s0,$s0,1 # x*0.5
 		
 	move $s1,$a3 # move y2 to stack
 	sub $s1,$s1,$a1 # y2 - y1
 	
 	mul $s1,$s1,7 # y*7
-	div $s1,$s1,8 # y/8
+	div $s1,$s1,8 # y/8 #sra returns wrong value
 		
 	sub $s0,$s0,$s1 # x*cos - y*sin
 
@@ -161,12 +161,13 @@ rotate_right:
 	sub $s0,$s0,$a0 # x2 - x1
 
 	mul $s0,$s0,7	#x*7	
-	div $s0,$s0,8 # x/8
+	sra $s0,$s0,3  # x/8
+	
 	
 	move $s1,$a3  # move y2 to stack
 	sub $s1,$s1,$a1 # y2 - y1
 
-	div $s1,$s1,2 #y*cos
+	sra $s1,$s1,1 # y*0.5
 	
 	add $s0,$s0,$s1 # x*cos + y*sin
 
@@ -190,13 +191,13 @@ rotate_left:
 	move $s0,$a2 # move x2 to stack
 	sub $s0,$s0,$a0 # x2 - x1
 	
-	div $s0,$s0,2  # x*cos
+	sra $s0,$s0,1 # x*0.5
 	
 	move $s1,$a3 # move y2 to stack
 	sub $s1,$s1,$a1 # y2 - y1
 	
 	mul $s1,$s1,7 # y*7
-	div $s1,$s1,8 # y/8
+	div $s1,$s1,8 # y/8 #sra returns wrong value
 		
 	add $s0,$s0,$s1 # x*cos + y*sin
 
@@ -208,12 +209,12 @@ rotate_left:
 	sub $s0,$s0,$a0 # x2 - x1
 		
 	mul $s0,$s0,7	#x*7	
-	div $s0,$s0,8 # x/8
+	sra $s0,$s0,3  # x/8
 	
 	move $s1,$a3  # move y2 to stack
 	sub $s1,$s1,$a1 # y2 - y1
 
-	div $s1,$s1,2 #y*cos
+	sra $s1,$s1,1 # y*0.5
 	
 	sub $s0,$s1,$s0 # y*cos - x*sin
 
