@@ -15,8 +15,8 @@ y1:	.space 4
 x2:	.space 4
 y2:	.space 4
 dy:	.space 4
-value1:	.space 4
-value2:	.space 4
+value1:	.space 4 # temporal value used during rotation
+value2:	.space 4 # temporal value used during rotation
 last_x2:	.space 4
 last_y2:	.space 4
 last_x1:	.space 4
@@ -29,6 +29,8 @@ input: .asciiz "+F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F
 		.text
 
 main:
+	j openFile	
+openFile:
 	# open file 'in.bmp':
 	la $a0, fileNameIn
 	li $a1, 0
@@ -36,7 +38,7 @@ main:
 	li $v0, 13
 	syscall	
 	move $t1, $v0 		# move descriptor to $t1
-	bltz $t1, fileExc # if the file is invalid exit
+	bltz $t1, fileError # if the file is invalid exit
 	# read 'BM' bytes :
 	move $a0, $t1
 	la $a1, buff
@@ -108,14 +110,14 @@ main:
 	li $v0, 16
 	syscall
 	lw $s5, offset		# load offset to $s5
-	li $t7, 0		#  counter set to 0
+	li $t7, 0		# counter set to 0
 	lw $s2, width
 	add $s1, $s1, $s5	# go to the start of pixel array
 	li $s6, 4
 	div $s2, $s6		# set padding 
 	mfhi $s6		# padding
-	
-	
+
+start_loop:		
 	li $t8, 0	# index for reading input string
 	li $a0, 0	# start.x		
    	li $a1,	0	# start.y
@@ -124,9 +126,8 @@ main:
    	sw $a0,last_x1
    	sw $a1,last_y1
 
-	jal inst_oxloop
-	
-inst_oxloop:
+	jal inst_loop
+inst_loop:
 	# iterate through series
     	lb $t9, input($t8)
     	# save file if the input ended
@@ -150,9 +151,9 @@ rotate_right:
 	sub $s1,$s1,$a1 # y2 - y1
 	
 	mul $s1,$s1,7 # y*7
-	div $s1,$s1,8 # y/8 #sra returns wrong value
+	div $s1,$s1,8 # y/8 no sra as the value might be negative
 		
-	sub $s0,$s0,$s1 # x*cos - y*sin
+	sub $s0,$s0,$s1 # x*0.5 - y*7/8
 
 	add $s0, $s0,$a0 # y2 + y1
 	move $v0,$s0 # resutl x2
@@ -161,7 +162,7 @@ rotate_right:
 	sub $s0,$s0,$a0 # x2 - x1
 
 	mul $s0,$s0,7	#x*7	
-	sra $s0,$s0,3  # x/8
+	sra $s0,$s0,3  # x/8 works here because we never get to negative in this case
 	
 	
 	move $s1,$a3  # move y2 to stack
@@ -169,7 +170,7 @@ rotate_right:
 
 	sra $s1,$s1,1 # y*0.5
 	
-	add $s0,$s0,$s1 # x*cos + y*sin
+	add $s0,$s0,$s1 # x*7/8 + y*0.5
 
 	add $s0, $s0,$a1 # y2 + y1
 	move $v1,$s0 # result y2
@@ -197,9 +198,9 @@ rotate_left:
 	sub $s1,$s1,$a1 # y2 - y1
 	
 	mul $s1,$s1,7 # y*7
-	div $s1,$s1,8 # y/8 #sra returns wrong value
+	div $s1,$s1,8 # y/8 #sra as the value might be negative
 		
-	add $s0,$s0,$s1 # x*cos + y*sin
+	add $s0,$s0,$s1 # x*0.5 + y*7/8
 
 	add $s0, $s0,$a0 # x2 + x1
 
@@ -209,14 +210,14 @@ rotate_left:
 	sub $s0,$s0,$a0 # x2 - x1
 		
 	mul $s0,$s0,7	#x*7	
-	sra $s0,$s0,3  # x/8
+	sra $s0,$s0,3  # x/8 works here because we never get to negative in this case
 	
 	move $s1,$a3  # move y2 to stack
 	sub $s1,$s1,$a1 # y2 - y1
 
 	sra $s1,$s1,1 # y*0.5
 	
-	sub $s0,$s1,$s0 # y*cos - x*sin
+	sub $s0,$s1,$s0 # y*0.5 - x*7/8
 
 	add $s0, $s0,$a1 # y2 + y1
 	move $v1,$s0 # result y2
@@ -233,8 +234,9 @@ rotate_left:
 case:
 	# increase index 
     	addi $t8, $t8, 1
-	# return to oxloop
-    	jal inst_oxloop 
+	# return to loop
+    	jal inst_loop 
+# go forward 
 forward:
 	lw $v0, last_x1							
     	lw $v1, last_y1
@@ -313,7 +315,7 @@ axis_determiner:
 	blez $a0, oyloop
 	b oxloop
 oxloop:
-	beq $t2, $t4, back 	# while(x!=x2)
+	beq $t2, $t4, end_forward # while(x!=x2)
 	bltz $s4, else2		# if(d>=0), go lower
 	add $t4, $t6, $t4	# x += xi
 	add $t5, $s0, $t5	# y += yi
@@ -322,6 +324,7 @@ oxloop:
 else2:
 	add $s4, $s3, $s4	#d += bi
 	add $t4, $t6, $t4	#x += xi
+	b next3
 next3:
 	# reset the values
 	sw $t0, x1		
@@ -379,7 +382,7 @@ else1:
 	sub $s4, $s3, $s7	# d = bi - dy
 	b axis_determiner
 oyloop:
-	beq $t3, $t5, back	# while(y!=y2)
+	beq $t3, $t5, end_forward	# while(y!=y2)
 	bltz $s4, else3		# if(d>=0), go up
 	add $t4, $t6, $t4	# x += xi
 	add $t5, $s0, $t5	# y += yi
@@ -389,13 +392,11 @@ else3:
 	add $s4, $s3, $s4	# d +=bi
 	add $t5, $t5, $s0	# y += yi
 	b next3
-fileExc:		# error messege to display when in.bmp is invalid
+fileError:		# error messege to display when in.bmp is invalid
 	li $v0, 4
 	la $a0, wrongFile 
 	syscall # print error message
 	b end
-back:
-	j end_forward
 saveFile:
 	# open "out.bmp"
 	la $a0, fileNameOut
@@ -404,7 +405,7 @@ saveFile:
 	li $v0, 13
 	syscall		
 	move $t0, $v0
-	bltz $t0, fileExc # if .bmp is invalid
+	bltz $t0, fileError # if .bmp is invalid
 	lw $s0, size
 	lw $s1, begging
 	move $a0, $t0
