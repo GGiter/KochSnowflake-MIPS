@@ -1,27 +1,26 @@
 ################################################################################
-# Koch Snowflake generator using simplified L-System and Bresenham algorithm   #
-# Topic 14									       #
+# Koch Snowflake using simplified L-System and Bresenham algorithm   	       #
+# Topic 15								       #
 # ARKO project								       #
 # Author : Piotr Gêbuœ							       #
 ################################################################################	
 		.data
 		.align 4
-buff:		.space 4
-offset:		.space 4
-size:		.space 4
-width:		.space 4
-file_size_buff:	.space 4
+buff:		.space 4 # buff
+offset:		.space 4 # offset
+size:		.space 4 # size
+width:		.space 4 # width
+file_size_buff:	.space 4 # file_size_buff
 x1:	.space 4
 y1:	.space 4
 x2:	.space 4
 y2:	.space 4
 dy:	.space 4
-value1:	.space 4 # temporal value used during rotation
-value2:	.space 4 # temporal value used during rotation
 last_x2:	.space 4
 last_y2:	.space 4
 last_x1:	.space 4
 last_y1:	.space 4
+value1:		.space 4 # temporal value
 axis:	.space 4
 wrongFile: .asciiz "Invalid input file."
 fileNameIn:	.asciiz "in.bmp"
@@ -30,17 +29,31 @@ input: .asciiz "+F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F+F+F+F--F+F--F+F--F
 		.text
 
 main:
-	j openFile	
+	la $a0, fileNameIn
+	jal openFile
+	
+	# pass arguments for instruction loop
+	li $t8, 0	# index for reading input string
+	li $a0, 0	# start.x		
+   	li $a1,	0	# start.y
+	li $a2, 17	# end.x	
+   	li $a3, 0	# end.y
+   	sw $a0,last_x1
+   	sw $a1,last_y1
+	jal instruction_loop
+	
+	la $a0, fileNameOut	
+	j saveFile
 openFile:
 	# open file 'in.bmp':
-	la $a0, fileNameIn
+	move $s3, $a0 # move file name to s3
 	li $a1, 0
 	li $a2, 0
 	li $v0, 13
 	syscall	
 	move $t1, $v0 		# move descriptor to $t1
 	bltz $t1, fileError # if the file is invalid exit
-	# read 'Haeder(BM)' bytes :
+	# read 'Header(BM)' bytes :
 	move $a0, $t1
 	la $a1, buff
 	li $a2, 2
@@ -95,7 +108,7 @@ openFile:
 	li $v0, 16
 	syscall
 	# read pixel array
-	la $a0, fileNameIn
+	move $a0, $s3
 	la $a1, 0
 	la $a2, 0
 	li $v0, 13
@@ -117,127 +130,84 @@ openFile:
 	li $s6, 4
 	div $s2, $s6		# set padding 
 	mfhi $s6		# padding
-
-start_loop:		
-	li $t8, 0	# index for reading input string
-	li $a0, 0	# start.x		
-   	li $a1,	0	# start.y
-	li $a2, 17	# end.x	
-   	li $a3, 0	# end.y
-   	sw $a0,last_x1
-   	sw $a1,last_y1
-
-	jal main_loop
-main_loop:
+	
+	jr $ra
+instruction_loop:
 	# iterate through series
     	lb $t9, input($t8)
     	# save file if the input ended
-   	beq $t9, 0, saveFile		
+   	beq $t9, 0, end_loop		
 	beq $t9,'+',rotate_right
 	beq $t9,'-',rotate_left
    	beq $t9,'F',forward
-   	jal case 
+   	j case 
     	sb $t9, input($t8)
+end_loop:
+	jr $ra
+rotate:	
+	move $s3,$a2 # move x2 to stack
+	sub $s3,$s3,$a0 # x2 - x1
+
+	sra $s3,$s3,1 # x2*0.5
+		
+	move $s4,$a3 # move y2 to stack
+	sub $s4,$s4,$a1 # y2 - y1
+	
+	sll $s4,$s4,3 
+	sub $s4,$s4,$a3
+	add $s4,$s4,$a1 # y*7
+	div $s4,$s4,8 # y/8 no sra as the value might be negative
+	
+	mul $s4,$s4,$s7 # negate y2 if we are rotating left
+	sub $s3,$s3,$s4 # x2*0.5 - y2*7/8
+
+	add $s3, $s3,$a0 # y2 + y1
+	move $v0,$s3 # resutl x2
+
+	move $s3,$a2  # move x2 to stack
+	sub $s3,$s3,$a0 # x2 - x1
+
+	sll $s3,$s3,3 
+	sub $s3,$s3,$a2
+	add $s3,$s3,$a0 # x2*7	
+	sra $s3,$s3,3  # x2/8 works here because we never get to negative in this case
+	
+	move $s4,$a3  # move y2 to stack
+	sub $s4,$s4,$a1 # y2 - y1
+
+	sra $s4,$s4,1 # y2*0.5
+	
+	mul $s3,$s3,$s7 # negate x2 if we are rotating left
+	add $s3,$s3,$s4 # x2*7/8 + y2*0.5
+
+	add $s3, $s3,$a1 # y2 + y1
+	move $v1,$s3 # result y2
+	
+	# new end.x and end.y 	 
+	move $a3,$v1
+	move $a2,$v0
+	
+	jr $ra
 # rotate by (60 degrees)	
 rotate_right:
-	# save values as there are too many variables
-	sw $s0, value1
-	sw $s1, value2
+	li $s7,1
+	sw $ra,4($sp)
+	jal rotate
+	lw $ra, 4($sp)
+	j case
 	
-	move $s0,$a2 # move x2 to stack
-	sub $s0,$s0,$a0 # x2 - x1
-
-	sra $s0,$s0,1 # x2*0.5
-		
-	move $s1,$a3 # move y2 to stack
-	sub $s1,$s1,$a1 # y2 - y1
-	
-	mul $s1,$s1,7 # y*7
-	div $s1,$s1,8 # y/8 no sra as the value might be negative
-		
-	sub $s0,$s0,$s1 # x2*0.5 - y2*7/8
-
-	add $s0, $s0,$a0 # y2 + y1
-	move $v0,$s0 # resutl x2
-
-	move $s0,$a2  # move x2 to stack
-	sub $s0,$s0,$a0 # x2 - x1
-
-	mul $s0,$s0,7	#x*7	
-	sra $s0,$s0,3  # x2/8 works here because we never get to negative in this case
-	
-	move $s1,$a3  # move y2 to stack
-	sub $s1,$s1,$a1 # y2 - y1
-
-	sra $s1,$s1,1 # y2*0.5
-	
-	add $s0,$s0,$s1 # x2*7/8 + y2*0.5
-
-	add $s0, $s0,$a1 # y2 + y1
-	move $v1,$s0 # result y2
-	
-	# new end.x and end.y 	 
-	move $a3,$v1
-	move $a2,$v0
-
-	# load saved values
-	lw $s0, value1
-	lw $s1, value2
-	
-	jal case
 #rotate by (-60 degrees)
 rotate_left:
-	# save values as there are too many variables
-	sw $s0, value1
-	sw $s1, value2
-
-	move $s0,$a2 # move x2 to stack
-	sub $s0,$s0,$a0 # x2 - x1
-	
-	sra $s0,$s0,1 # x2*0.5
-	
-	move $s1,$a3 # move y2 to stack
-	sub $s1,$s1,$a1 # y2 - y1
-	
-	mul $s1,$s1,7 # y2*7
-	div $s1,$s1,8 # y2/8 #sra as the value might be negative
-		
-	add $s0,$s0,$s1 # x2*0.5 + y2*7/8
-
-	add $s0, $s0,$a0 # x2 + x1
-
-	move $v0,$s0 # resutl x2
-	
-	move $s0,$a2  # move x2 to stack
-	sub $s0,$s0,$a0 # x2 - x1
-		
-	mul $s0,$s0,7	#x2*7	
-	sra $s0,$s0,3  # x2/8 works here because we never get to negative in this case
-	
-	move $s1,$a3  # move y2 to stack
-	sub $s1,$s1,$a1 # y2 - y1
-
-	sra $s1,$s1,1 # y2*0.5
-	
-	sub $s0,$s1,$s0 # y2*0.5 - x2*7/8
-
-	add $s0, $s0,$a1 # y2 + y1
-	move $v1,$s0 # result y2
-	
-	# new end.x and end.y 	 
-	move $a3,$v1
-	move $a2,$v0
-
-	# load saved values
-	lw $s0, value1
-	lw $s1, value2
-	
-	jal case
+	li $s7,-1
+	sw $ra,4($sp)
+	jal rotate
+	lw $ra, 4($sp)
+	j case
 case:
 	# increase index 
     	addi $t8, $t8, 1
 	# return to loop
-    	jal main_loop 
+    	j instruction_loop 
 # go forward 
 forward:
 	lw $v0, last_x1							
@@ -263,9 +233,10 @@ forward:
     	add $a2,$a2,60	
     	add $a3,$a3,80
     	
+    	sw $ra,4($sp)
 	jal drawLine
-#after finishing drawing the line
-end_forward:
+	lw $ra, 4($sp)
+	
 	# load last values	
 	lw $a0, last_x1							
     	lw $a1, last_y1
@@ -302,7 +273,6 @@ next:
 y2greater:
 	li $s0, -1		# yi = -1
 	sub $s7, $t1, $t3	# dy = y2 - y1
-	b ox
 ox:	
 	bge $s7, $t7, oy  # if (dy>=dx) go to oy
 	# OX
@@ -312,13 +282,11 @@ ox:
 	sub $s4, $s3, $t7	# d = bi - dx
 	li $v0 , 1
 	sw $v0 , axis
-	b axis_determiner
 axis_determiner:
 	lw $a0,axis
 	blez $a0, oyloop 
-	b oxloop
 oxloop:
-	beq $t2, $t4, end_forward # while(x!=x2)
+	beq $t2, $t4, end_draw_line # while(x!=x2)
 	bltz $s4, increase_x		# if(d>=0), go lower
 	add $t4, $t6, $t4	# x += xi
 	add $t5, $s0, $t5	# y += yi
@@ -340,7 +308,6 @@ increase_x:
 increase_y:
 	add $s4, $s3, $s4	# d +=bi
 	add $t5, $t5, $s0	# y += yi
-	b reset
 reset:
 	# reset the values
 	sw $t0, x1		
@@ -348,7 +315,6 @@ reset:
 	sw $t2, x2
 	sw $t3, y2
 	sw $s7, dy
-	b coloring
 coloring:			
 	lw $s5, width		# width
 	move $t1, $t4		# x
@@ -390,13 +356,14 @@ ypositive:
 	lw $s7, dy
 	b axis_determiner
 oyloop:
-	beq $t3, $t5, end_forward	# while(y!=y2)
+	beq $t3, $t5, end_draw_line	# while(y!=y2)
 	bltz $s4, increase_y		# if(d>=0), go up
 	add $t4, $t6, $t4	# x += xi
 	add $t5, $s0, $t5	# y += yi
 	add $s4, $s2, $s4	# d +=ai
 	b reset
-
+end_draw_line:
+	jr $ra
 fileError:		# error messege to display when in.bmp is invalid
 	li $v0, 4
 	la $a0, wrongFile 
@@ -404,7 +371,6 @@ fileError:		# error messege to display when in.bmp is invalid
 	b end
 saveFile:
 	# open "out.bmp"
-	la $a0, fileNameOut
 	li $a1, 1
 	li $a2, 0
 	li $v0, 13
